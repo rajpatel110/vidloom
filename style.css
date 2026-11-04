@@ -80,3 +80,5 @@ aside label { min-width: 0; }
 .diagnostics dl { display: grid; grid-template-columns: repeat(auto-fit,minmax(9rem,1fr)); gap: .8rem; margin: .8rem 0; }
 .diagnostics dt, .diagnostics small { font-size: .85rem; color: #63565d; }
 .diagnostics dd { margin: 0; font-weight: 650; font-variant-numeric: tabular-nums; }
+
+.rejoin { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin-bottom: 1rem; }

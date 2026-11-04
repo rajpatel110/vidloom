@@ -1,12 +1,13 @@
 import type {ConnectionDetails} from './diagnostics';
 import React, {useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {joinRoom} from './peer';
+import {joinRoom, rejoinStates, type RoomState} from './peer';
 import {CallMedia} from './CallMedia';
 import './style.css';
 
 function Room({id}: {id: string}) {
-  const [state, status] = useState('Joining');
+  const [state, status] = useState<RoomState>('Joining');
+  const [attempt, setAttempt] = useState(0);
   const [messages, setMessages] = useState<{from:string, text:string}[]>([]);
   const [route, setRoute] = useState<ConnectionDetails | null>(null);
   const [remote, setRemote] = useState<MediaStream | null>(null);
@@ -21,9 +22,13 @@ function Room({id}: {id: string}) {
     const connection = joinRoom(id, status, text => add('Peer', text), setRemote, setRoute, setReceived);
     peer.current = connection;
     return () => connection.close();
-  }, [id]);
+  }, [id, attempt]);
   return <><header><Brand/><a href="/">Leave room</a></header>
     <div className="room-title"><h1>Call room</h1><p className="status" role="status">{state}</p>{state === 'Connected' && <p>{route?.label || 'Checking connection route…'}</p>}</div>
+    {rejoinStates.some(reason => reason === state) && <div className="rejoin">
+      <p>{state === 'Room full' ? 'Both places are taken. Try again when someone leaves.' : 'You can rejoin using this room link.'}</p>
+      <button onClick={() => { status('Joining'); setAttempt(previous => previous + 1); }}>Rejoin room</button>
+    </div>}
     {state === 'Connected' && <details className="diagnostics">
       <summary>Connection details</summary>
       <dl>

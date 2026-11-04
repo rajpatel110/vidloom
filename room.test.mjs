@@ -28,6 +28,10 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
   const context = await browser.newContext();
   await context.grantPermissions(['camera', 'microphone']);
   await context.addInitScript(() => {
+    const NativeSocket = window.WebSocket;
+    window.WebSocket = class extends NativeSocket {
+      constructor(...args) { super(...args); window.signalingSocket = this; }
+    };
     const NativePeer = window.RTCPeerConnection;
     window.RTCPeerConnection = class extends NativePeer {
       constructor(...args) { super(...args); window.roomPeer = this; }
@@ -152,6 +156,15 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
   await exchange(second,first,'second rejoined');
   await first.close();
   await wait(second,'Waiting for peer');
-  await third.reload();
+  await third.getByRole('button', {name:'Rejoin room'}).click();
   await exchange(third,second,'slot reused');
+  await third.evaluate(() => {
+    window.beforeRejoin = true;
+    window.signalingSocket.close();
+  });
+  await wait(third, 'Disconnected');
+  await wait(second, 'Waiting for peer');
+  await third.getByRole('button', {name:'Rejoin room'}).click();
+  await exchange(second,third,'recovered after signaling loss');
+  assert.equal(await third.evaluate(() => window.beforeRejoin), true);
 });

@@ -1,7 +1,11 @@
 import {selectedRoute, type ConnectionDetails} from './diagnostics';
 import {receiveFile, sendFile} from './files';
 
-export function joinRoom(id: string, status: (s: string) => void, receive: (s: string) => void, remote: (stream: MediaStream | null) => void, route: (details: ConnectionDetails | null) => void, deliver: (file: File | null) => void) {
+export const rejoinStates = ['Room full', 'Disconnected', 'Channel closed', 'Connection failed', 'Negotiation failed'] as const;
+type RoomState = typeof rejoinStates[number] | 'Joining' | 'Connected' | 'Waiting for peer' | 'Connecting';
+export type {RoomState};
+
+export function joinRoom(id: string, status: (s: RoomState) => void, receive: (s: string) => void, remote: (stream: MediaStream | null) => void, route: (details: ConnectionDetails | null) => void, deliver: (file: File | null) => void) {
   const url = new URL('/signal', location.href);
   url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(url);
@@ -39,7 +43,7 @@ export function joinRoom(id: string, status: (s: string) => void, receive: (s: s
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({type, value, session}));
   }
   ws.onopen = () => ws.send(JSON.stringify({type:'join', id}));
-  ws.onclose = () => { reset(); if (!disposed && !full) status('Disconnected · refresh to rejoin'); };
+  ws.onclose = () => { if (disposed) return; reset(); if (!full) status('Disconnected'); };
   // Serialize async SDP changes and candidate processing in wire order.
   let queue = Promise.resolve();
   ws.onmessage = event => {
@@ -81,7 +85,7 @@ export function joinRoom(id: string, status: (s: string) => void, receive: (s: s
             void updateRoute();
             routeTimer = window.setInterval(updateRoute, 3000);
           }
-          if (current.connectionState === 'failed') status('Connection failed · refresh to retry');
+          if (current.connectionState === 'failed') status('Connection failed');
         };
         let incomingFile: RTCDataChannel | undefined;
         current.ondatachannel = ({channel}) => {
@@ -111,7 +115,7 @@ export function joinRoom(id: string, status: (s: string) => void, receive: (s: s
           signal('answer', pc.localDescription);
         }
       }
-    }).catch(() => { if (!disposed) status('Negotiation failed · refresh to retry'); });
+    }).catch(() => { if (!disposed) status('Negotiation failed'); });
   };
   return {
     async setTrack(kind: string, track: MediaStreamTrack | null) {
