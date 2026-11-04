@@ -9,7 +9,7 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
   await server.listen();
   t.after(() => server.close());
   const edge = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
-  const browser = await chromium.launch({args: ['--use-fake-device-for-media-stream'], executablePath:process.env.BROWSER_PATH || (existsSync(edge) ? edge : undefined)});
+  const browser = await chromium.launch({args: ['--use-fake-device-for-media-stream', '--allow-loopback-in-peer-connection'], executablePath:process.env.BROWSER_PATH || (existsSync(edge) ? edge : undefined)});
   t.after(() => browser.close());
   const context = await browser.newContext();
   await context.grantPermissions(['camera', 'microphone']);
@@ -35,6 +35,9 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
   }
   await exchange(first,second,'hello');
   for (const page of [first, second]) {
+    if (process.env.ICE_TRANSPORT_POLICY === 'relay') await wait(page, 'Relayed via TURN');
+    else if (!process.env.TURN_URLS) await wait(page, 'Direct peer connection');
+    else await wait(page, /^(Direct peer connection|Relayed via TURN)$/);
     await page.getByRole('button',{name:'Enable microphone'}).click();
     await page.getByRole('button',{name:'Enable camera'}).click();
   }

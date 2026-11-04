@@ -1,4 +1,4 @@
-export function joinRoom(id: string, status: (s: string) => void, receive: (s: string) => void, remote: (stream: MediaStream | null) => void) {
+export function joinRoom(id: string, status: (s: string) => void, receive: (s: string) => void, remote: (stream: MediaStream | null) => void, route: (label: string) => void) {
   const url = new URL('/signal', location.href);
   url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(url);
@@ -9,7 +9,10 @@ export function joinRoom(id: string, status: (s: string) => void, receive: (s: s
   let full = false;
   let disposed = false;
   let pending: RTCIceCandidateInit[] = [];
+  let routeTimer: number | undefined;
   function reset() {
+    window.clearInterval(routeTimer);
+    route('');
     session = '';
     remote(null);
     senders.clear();
@@ -45,8 +48,23 @@ export function joinRoom(id: string, status: (s: string) => void, receive: (s: s
         reset();
         session = m.session;
         status('Connecting');
-        const current = new RTCPeerConnection();
+        const current = new RTCPeerConnection(m.configuration);
         pc = current;
+        async function updateRoute() {
+          let label = 'Route unavailable';
+          try {
+            const stats = await current.getStats();
+            stats.forEach(report => {
+              if (report.type !== 'transport' || !report.selectedCandidatePairId) return;
+              const pair = stats.get(report.selectedCandidatePairId);
+              const local = stats.get(pair?.localCandidateId)?.candidateType;
+              const remoteType = stats.get(pair?.remoteCandidateId)?.candidateType;
+              if (local === 'relay' || remoteType === 'relay') label = 'Relayed via TURN';
+              else if (local && remoteType) label = 'Direct peer connection';
+            });
+          } catch { /* Some browsers omit transport statistics. */ }
+          if (pc === current) route(label);
+        }
         const incoming = new MediaStream();
         current.ontrack = ({track}) => {
           if (pc !== current) return;
@@ -60,7 +78,14 @@ export function joinRoom(id: string, status: (s: string) => void, receive: (s: s
         }
         current.onicecandidate = e => { if (pc === current && e.candidate) signal('candidate', e.candidate); };
         current.onconnectionstatechange = () => {
-          if (pc === current && current.connectionState === 'failed') status('Connection failed · refresh to retry');
+          if (pc !== current) return;
+          window.clearInterval(routeTimer);
+          route('');
+          if (current.connectionState === 'connected') {
+            void updateRoute();
+            routeTimer = window.setInterval(updateRoute, 3000);
+          }
+          if (current.connectionState === 'failed') status('Connection failed · refresh to retry');
         };
         current.ondatachannel = e => attach(e.channel);
         if (m.initiator) {

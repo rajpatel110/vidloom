@@ -7,6 +7,7 @@ import './style.css';
 function Room({id}: {id: string}) {
   const [state, status] = useState('Joining');
   const [messages, setMessages] = useState<{from:string, text:string}[]>([]);
+  const [route, setRoute] = useState('');
   const [remote, setRemote] = useState<MediaStream | null>(null);
   const [draft, setDraft] = useState('');
   const [copied, setCopied] = useState('');
@@ -15,12 +16,12 @@ function Room({id}: {id: string}) {
     setMessages(old => [...old.slice(-99), {from, text}]);
   }
   useEffect(() => {
-    const connection = joinRoom(id, status, text => add('Peer', text), setRemote);
+    const connection = joinRoom(id, status, text => add('Peer', text), setRemote, setRoute);
     peer.current = connection;
     return () => connection.close();
   }, [id]);
   return <><header><span>PEER ROOM</span><a href="/">Leave room</a></header>
-    <h1>Call room</h1><p role="status">{state}</p>
+    <h1>Call room</h1><p role="status">{state}</p>{state === 'Connected' && <p>{route || 'Checking connection route…'}</p>}
     <label>Invite link<input readOnly value={location.href} onFocus={e => e.target.select()}/></label>
     <button onClick={async () => {try {await navigator.clipboard.writeText(location.href); setCopied('Copied');} catch {setCopied('Select the link above to copy it');}}}>Copy link</button> <small role="status">{copied}</small>
     {state === 'Connected' && peer.current && <CallMedia connection={peer.current} remote={remote}/>}

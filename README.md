@@ -18,8 +18,24 @@ The Connected state follows the data channel's open event. Messages travel over 
 
 Run `npm run build` for type checking and a production client bundle. Run `npm test` to exercise real tabs with headless Chromium. The test uses Microsoft Edge at its standard Windows location, or set BROWSER_PATH to a Chromium executable. The test starts its own local server.
 
-## Scope
+## Direct and relayed connections
 
-Local host ICE candidates only for this milestone. STUN configuration and verified TURN relay connectivity are subsequent milestones. Browser tests use synthetic camera and microphone input and verify decoded video frames and received audio samples at both ends. The standalone client bundle requires a signaling service. Locally, both Vite dev and preview attach the Node WebSocket handler.
+With no ICE environment variables the app works locally with host candidates. To enable NAT traversal, set the following variables in the shell that runs the Node server. Restart the server after changes.
+
+| Variable | Purpose |
+| --- | --- |
+| STUN_URLS | Comma-separated STUN endpoints for public address discovery. |
+| TURN_URLS | Comma-separated TURN endpoints, such as turn:relay.example.org:3478?transport=udp and turns:relay.example.org:5349?transport=tcp. Supply your own reachable service. |
+| TURN_SHARED_SECRET | Server-side coturn REST authentication secret. Each pairing receives separate one-hour credentials. |
+| TURN_USERNAME, TURN_PASSWORD | Alternative credentials for a local fixture or a provider issuing temporary user credentials. Admitted browsers receive these values. |
+| ICE_TRANSPORT_POLICY | Defaults to all. Set relay to require a TURN path on both peers. |
+
+Use shell environment variables for secrets. The server sends the browser its ICE configuration when the second peer joins. The shared secret stays on the server. While connected, the client checks the selected ICE pair every three seconds. If either candidate is a relay candidate, the UI shows **Relayed via TURN**.
+
+### Verify the network path
+
+1. Run npm test without ICE settings for the direct-path check.
+2. With an authenticated TURN service running, set TURN_URLS, its credentials and ICE_TRANSPORT_POLICY=relay, then run npm test again. Both tabs must report a relayed path, exchange chat, receive audio samples and decode video frames. The browser test enables loopback ICE for a local TURN fixture.
+3. For a separate-network check, serve the app and signaling over HTTPS/WSS and use a TURN address reachable from both networks. Open one invite on Wi-Fi and another on cellular, enable both devices and check media and chat. Repeat with the relay policy and confirm the route label on both devices.
 
 Architecture reference: [ChandraPratap01/Vidloom](https://github.com/ChandraPratap01/Vidloom).

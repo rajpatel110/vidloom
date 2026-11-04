@@ -1,7 +1,9 @@
+import { iceConfig } from './ice.mjs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'node:crypto';
 
 export function attachRooms(server) {
+  const configuration = iceConfig();
   const rooms = new Map();
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 65536 });
   server.on('upgrade', (req, socket, head) => {
@@ -34,7 +36,7 @@ export function attachRooms(server) {
         send(ws, { type: 'waiting' });
         if (room.peers.size === 2) {
           room.session = randomUUID();
-          for (const peer of room.peers) send(peer, { type: 'pair', session: room.session, initiator: peer !== ws });
+          for (const peer of room.peers) send(peer, { type: 'pair', session: room.session, initiator: peer !== ws, configuration: configuration() });
         }
         return;
       }
