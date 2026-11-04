@@ -2,12 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { chromium } from 'playwright-core';
-import { createServer } from 'vite';
+import { fork } from 'node:child_process';
+
 
 test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90000}, async t => {
-  const server = await createServer({server:{host:'127.0.0.1',port:0},logLevel:'error'});
-  await server.listen();
-  t.after(() => server.close());
+  const server = fork(new URL('./serve.mjs', import.meta.url), {
+    env: {...process.env, HOST: '127.0.0.1', PORT: '0'}
+  });
+  t.after(() => server.kill());
+  const ready = new Promise((resolve, reject) => {
+    server.once('message', resolve);
+    server.once('error', reject);
+    server.once('exit', code => reject(new Error('Server exited: ' + code)));
+  });
+  const {port} = await ready;
+  const origin = 'http://127.0.0.1:' + port;
+  assert.equal(await (await fetch(origin + '/healthz')).text(), 'ok');
+  assert.equal((await fetch(origin + '/server.mjs')).status, 404);
+  assert.equal((await fetch(origin, {method:'POST'})).status, 405);
   const edge = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
   const browser = await chromium.launch({args: ['--use-fake-device-for-media-stream', '--allow-loopback-in-peer-connection'], executablePath:process.env.BROWSER_PATH || (existsSync(edge) ? edge : undefined)});
   t.after(() => browser.close());
@@ -20,7 +32,7 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
     };
   });
   const first = await context.newPage();
-  await first.goto(server.resolvedUrls.local[0]);
+  await first.goto(origin);
   await first.getByRole('button',{name:'Create room'}).click();
   const wait = (page, text) => page.getByText(text,{exact:true}).waitFor({timeout:10000});
   await wait(first,'Waiting for peer');
