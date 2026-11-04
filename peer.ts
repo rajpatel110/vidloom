@@ -1,15 +1,18 @@
-export function joinRoom(id: string, status: (s: string) => void, receive: (s: string) => void) {
+export function joinRoom(id: string, status: (s: string) => void, receive: (s: string) => void, remote: (stream: MediaStream | null) => void) {
   const url = new URL('/signal', location.href);
   url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(url);
   let pc: RTCPeerConnection | undefined;
   let data: RTCDataChannel | undefined;
+  const senders = new Map<string, RTCRtpSender>();
   let session = '';
   let full = false;
   let disposed = false;
   let pending: RTCIceCandidateInit[] = [];
   function reset() {
     session = '';
+    remote(null);
+    senders.clear();
     const previous = pc;
     pc = undefined;
     data?.close();
@@ -44,6 +47,17 @@ export function joinRoom(id: string, status: (s: string) => void, receive: (s: s
         status('Connecting');
         const current = new RTCPeerConnection();
         pc = current;
+        const incoming = new MediaStream();
+        current.ontrack = ({track}) => {
+          if (pc !== current) return;
+          incoming.addTrack(track);
+          remote(incoming);
+        };
+        // Reserve both media sections so either peer can enable a device later.
+        for (const kind of ['audio', 'video']) {
+          const transceiver = current.addTransceiver(kind, {direction: 'sendrecv'});
+          senders.set(kind, transceiver.sender);
+        }
         current.onicecandidate = e => { if (pc === current && e.candidate) signal('candidate', e.candidate); };
         current.onconnectionstatechange = () => {
           if (pc === current && current.connectionState === 'failed') status('Connection failed · refresh to retry');
@@ -72,6 +86,11 @@ export function joinRoom(id: string, status: (s: string) => void, receive: (s: s
     }).catch(() => { if (!disposed) status('Negotiation failed · refresh to retry'); });
   };
   return {
+    async setTrack(kind: string, track: MediaStreamTrack | null) {
+      const sender = senders.get(kind);
+      if (!sender) throw new Error('Peer disconnected');
+      await sender.replaceTrack(track);
+    },
     send(text: string) {
       if (data?.readyState !== 'open') return false;
       data.send(text);

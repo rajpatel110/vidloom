@@ -9,9 +9,16 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
   await server.listen();
   t.after(() => server.close());
   const edge = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
-  const browser = await chromium.launch({executablePath:process.env.BROWSER_PATH || (existsSync(edge) ? edge : undefined)});
+  const browser = await chromium.launch({args: ['--use-fake-device-for-media-stream'], executablePath:process.env.BROWSER_PATH || (existsSync(edge) ? edge : undefined)});
   t.after(() => browser.close());
   const context = await browser.newContext();
+  await context.grantPermissions(['camera', 'microphone']);
+  await context.addInitScript(() => {
+    const NativePeer = window.RTCPeerConnection;
+    window.RTCPeerConnection = class extends NativePeer {
+      constructor(...args) { super(...args); window.roomPeer = this; }
+    };
+  });
   const first = await context.newPage();
   await first.goto(server.resolvedUrls.local[0]);
   await first.getByRole('button',{name:'Create room'}).click();
@@ -27,6 +34,23 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
     await receiver.getByRole('log').getByText(text,{exact:false}).waitFor({timeout:5000});
   }
   await exchange(first,second,'hello');
+  for (const page of [first, second]) {
+    await page.getByRole('button',{name:'Enable microphone'}).click();
+    await page.getByRole('button',{name:'Enable camera'}).click();
+  }
+  for (const page of [first, second]) {
+    await page.waitForFunction(async () => {
+      const reports = [...(await window.roomPeer.getStats()).values()];
+      const inbound = reports.filter(report => report.type === 'inbound-rtp');
+      return inbound.some(report => report.kind === 'audio' && report.totalSamplesReceived > 0)
+        && inbound.some(report => report.kind === 'video' && report.framesDecoded > 0);
+    }, null, {timeout: 12000});
+  }
+  for (const name of ['Mute microphone', 'Turn camera off']) {
+    await first.getByRole('button',{name}).click();
+  }
+  await first.waitForFunction(() => window.roomPeer.getSenders().every(sender => !sender.track));
+  await exchange(first, second, 'chat after stopping devices');
   const third = await context.newPage();
   await third.goto(invite);
   await wait(third,'Room full');
