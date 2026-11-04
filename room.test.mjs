@@ -56,6 +56,8 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
     await receiver.getByRole('log').getByText(text,{exact:false}).waitFor({timeout:5000});
   }
   await exchange(first,second,'hello');
+  await wait(second,'Peer microphone muted');
+  await wait(second,'Peer camera off');
   const payload = randomBytes(1024 * 1024 + 17);
   const fileInput = first.getByLabel('Send a file', {exact:false});
   await fileInput.setInputFiles({name:'sample.bin', mimeType:'application/octet-stream', buffer:payload});
@@ -100,6 +102,10 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
         && inbound.some(report => report.kind === 'video' && report.framesDecoded > 0);
     }, null, {timeout: 12000});
   }
+  for (const page of [first,second]) {
+    await wait(page,'Peer microphone on');
+    await wait(page,'Peer camera on');
+  }
   // A solid green synthetic display lets the receiver prove which source it decoded.
   await first.evaluate(() => {
     window.originalCamera = window.roomPeer.getSenders().find(s => s.track?.kind === 'video').track;
@@ -128,10 +134,12 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
     const [r,g,b] = ctx.getImageData(0,0,1,1).data;
     return g > 180 && r < 60 && b < 60;
   }, null, {timeout:12000});
+  await wait(second,'Peer sharing screen');
   await exchange(first, second, 'chat during screen share');
   await first.getByRole('button', {name:'Stop sharing'}).click();
   await first.waitForFunction(() => window.displayTrack.readyState === 'ended' &&
     window.roomPeer.getSenders().some(s => s.track === window.originalCamera));
+  await wait(second,'Peer camera on');
   for (const name of ['Mute microphone', 'Turn camera off']) {
     await first.getByRole('button',{name}).click();
   }
@@ -144,6 +152,8 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
   });
   await first.getByRole('button', {name:'Share screen'}).waitFor();
   await first.waitForFunction(() => window.roomPeer.getSenders().every(sender => !sender.track));
+  await wait(second,'Peer microphone muted');
+  await wait(second,'Peer camera off');
   await exchange(first, second, 'chat after stopping devices');
   assert.ok(await second.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   const third = await context.newPage();
@@ -158,6 +168,8 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
   await wait(second,'Waiting for peer');
   await third.getByRole('button', {name:'Rejoin room'}).click();
   await exchange(third,second,'slot reused');
+  await wait(third,'Peer microphone muted');
+  await wait(third,'Peer camera off');
   await third.evaluate(() => {
     window.beforeRejoin = true;
     window.signalingSocket.close();

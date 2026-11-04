@@ -1,11 +1,12 @@
 import {useEffect, useRef, useState} from 'react';
-import type {joinRoom} from './peer';
+import type {joinRoom, MediaState} from './peer';
 
 type Kind = 'audio' | 'video';
 
-export function CallMedia({connection, remote}: {
+export function CallMedia({connection, remote, peerMedia}: {
   connection: ReturnType<typeof joinRoom>;
   remote: MediaStream | null;
+  peerMedia: MediaState | null;
 }) {
   const [local] = useState(() => new MediaStream());
   const [enabled, setEnabled] = useState({audio: false, video: false});
@@ -31,6 +32,10 @@ export function CallMedia({connection, remote}: {
   useEffect(() => {
     if (player.current) player.current.srcObject = remote;
   }, [remote]);
+
+  useEffect(() => {
+    connection.updateMedia({mic: enabled.audio, video: sharing ? 'screen' : enabled.video ? 'camera' : 'off'});
+  }, [connection, enabled, sharing]);
 
   async function toggle(kind: Kind) {
     setBusy(kind);
@@ -114,6 +119,12 @@ export function CallMedia({connection, remote}: {
   return <div className="call">
     <figure><video ref={player} aria-label="Peer video" autoPlay playsInline controls/><figcaption>Peer</figcaption></figure>
     <figure className="preview"><video ref={preview} aria-label="Your preview" autoPlay muted playsInline/><figcaption>{sharing ? 'Your screen' : 'You'}</figcaption></figure>
+    <p className="peer-devices" role="status" aria-label="Peer devices">
+      {peerMedia ? <>
+        <span>{peerMedia.mic ? 'Peer microphone on' : 'Peer microphone muted'}</span>
+        <span>{peerMedia.video === 'screen' ? 'Peer sharing screen' : peerMedia.video === 'camera' ? 'Peer camera on' : 'Peer camera off'}</span>
+      </> : 'Peer device status unavailable'}
+    </p>
     <div className="devices">
       <button disabled={busy !== null} onClick={() => toggle('audio')}>{enabled.audio ? 'Mute microphone' : 'Enable microphone'}</button>
       <button disabled={busy !== null || sharing} onClick={() => toggle('video')}>{enabled.video ? 'Turn camera off' : 'Enable camera'}</button>

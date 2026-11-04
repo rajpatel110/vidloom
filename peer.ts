@@ -5,12 +5,20 @@ export const rejoinStates = ['Room full', 'Disconnected', 'Channel closed', 'Con
 type RoomState = typeof rejoinStates[number] | 'Joining' | 'Connected' | 'Waiting for peer' | 'Connecting';
 export type {RoomState};
 
-export function joinRoom(id: string, status: (s: RoomState) => void, receive: (s: string) => void, remote: (stream: MediaStream | null) => void, route: (details: ConnectionDetails | null) => void, deliver: (file: File | null) => void) {
+export type MediaState = { mic: boolean; video: 'off' | 'camera' | 'screen' };
+const devicesOff: MediaState = {mic: false, video: 'off'};
+
+export function joinRoom(id: string, status: (s: RoomState) => void, receive: (s: string) => void, remote: (stream: MediaStream | null) => void, route: (details: ConnectionDetails | null) => void, deliver: (file: File | null) => void, peerMedia: (state: MediaState | null) => void) {
   const url = new URL('/signal', location.href);
   url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(url);
   let pc: RTCPeerConnection | undefined;
   let data: RTCDataChannel | undefined;
+  let presence: RTCDataChannel | undefined;
+  let localMedia = devicesOff;
+  function publishMedia() {
+    if (presence?.readyState === 'open') presence.send(JSON.stringify(localMedia));
+  }
   const senders = new Map<string, RTCRtpSender>();
   let session = '';
   let full = false;
@@ -23,6 +31,9 @@ export function joinRoom(id: string, status: (s: RoomState) => void, receive: (s
     session = '';
     remote(null);
     deliver(null);
+    presence = undefined;
+    localMedia = devicesOff;
+    peerMedia(null);
     senders.clear();
     const previous = pc;
     pc = undefined;
@@ -58,6 +69,20 @@ export function joinRoom(id: string, status: (s: RoomState) => void, receive: (s
         status('Connecting');
         const current = new RTCPeerConnection(m.configuration);
         pc = current;
+        // Both peers reserve this SCTP stream explicitly. Chat stays plain text.
+        const control = current.createDataChannel('media-state', {negotiated: true, id: 100});
+        presence = control;
+        control.onopen = () => { if (presence === control) publishMedia(); };
+        control.onclose = () => { if (presence === control) peerMedia(null); };
+        control.onmessage = ({data}) => {
+          if (presence !== control || typeof data !== 'string' || data.length > 128) return;
+          try {
+            const state = JSON.parse(data);
+            if (typeof state?.mic === 'boolean' && ['off','camera','screen'].includes(state.video)) {
+              peerMedia({mic: state.mic, video: state.video});
+            }
+          } catch { /* Ignore malformed status updates. */ }
+        };
         async function updateRoute() {
           let details: ConnectionDetails = {label: 'Route unavailable'};
           try {
@@ -118,6 +143,10 @@ export function joinRoom(id: string, status: (s: RoomState) => void, receive: (s
     }).catch(() => { if (!disposed) status('Negotiation failed'); });
   };
   return {
+    updateMedia(state: MediaState) {
+      localMedia = state;
+      publishMedia();
+    },
     async setTrack(kind: string, track: MediaStreamTrack | null) {
       const sender = senders.get(kind);
       if (!sender) throw new Error('Peer disconnected');

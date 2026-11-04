@@ -1,7 +1,7 @@
 import type {ConnectionDetails} from './diagnostics';
 import React, {useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {joinRoom, rejoinStates, type RoomState} from './peer';
+import {joinRoom, rejoinStates, type RoomState, type MediaState} from './peer';
 import {CallMedia} from './CallMedia';
 import './style.css';
 
@@ -10,6 +10,7 @@ function Room({id}: {id: string}) {
   const [attempt, setAttempt] = useState(0);
   const [messages, setMessages] = useState<{from:string, text:string}[]>([]);
   const [route, setRoute] = useState<ConnectionDetails | null>(null);
+  const [peerMedia, setPeerMedia] = useState<MediaState | null>(null);
   const [remote, setRemote] = useState<MediaStream | null>(null);
   const [received, setReceived] = useState<File | null>(null);
   const [draft, setDraft] = useState('');
@@ -19,7 +20,7 @@ function Room({id}: {id: string}) {
     setMessages(old => [...old.slice(-99), {from, text}]);
   }
   useEffect(() => {
-    const connection = joinRoom(id, status, text => add('Peer', text), setRemote, setRoute, setReceived);
+    const connection = joinRoom(id, status, text => add('Peer', text), setRemote, setRoute, setReceived, setPeerMedia);
     peer.current = connection;
     return () => connection.close();
   }, [id, attempt]);
@@ -42,7 +43,7 @@ function Room({id}: {id: string}) {
     <div className="invite"><label>Invite link<input readOnly value={location.href} onFocus={e => e.target.select()}/></label>
     <button onClick={async () => {try {await navigator.clipboard.writeText(location.href); setCopied('Copied');} catch {setCopied('Select the link above to copy it');}}}>Copy link</button> <small role="status">{copied}</small></div>
     <div className="room-grid"><div className="stage">
-      {state === 'Connected' && peer.current ? <CallMedia connection={peer.current} remote={remote}/> :
+      {state === 'Connected' && peer.current ? <CallMedia connection={peer.current} remote={remote} peerMedia={peerMedia}/> :
         <div className="standby"><SignalArt/><p>{state === 'Waiting for peer' ? 'Share the invite link to bring someone in.' : 'Video stage'}</p></div>}
     </div><aside><h2>Room chat</h2>
     <section role="log" aria-label="Chat messages">{messages.length ? messages.map((m,i) => <p key={i}><b>{m.from}</b> {m.text}</p>) : <p>Messages appear here once you and your peer connect.</p>}</section>
