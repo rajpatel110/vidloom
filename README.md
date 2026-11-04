@@ -59,4 +59,4 @@ Use shell environment variables for secrets. The server sends the browser its IC
 2. With an authenticated TURN service running, set TURN_URLS, its credentials and ICE_TRANSPORT_POLICY=relay, then run npm test again. Both tabs must report a relayed path, exchange chat, receive audio samples and decode video frames. The browser test enables loopback ICE for a local TURN fixture.
 3. For a separate-network check, serve the app and signaling over HTTPS/WSS and use a TURN address reachable from both networks. Open one invite on Wi-Fi and another on cellular, enable both devices and check media and chat. Repeat with the relay policy and confirm the route label on both devices.
 
-Architecture reference: [ChandraPratap01/Vidloom](https://github.com/ChandraPratap01/Vidloom).
+
