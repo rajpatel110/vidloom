@@ -10,6 +10,8 @@ export function CallMedia({connection, remote}: {
   const [local] = useState(() => new MediaStream());
   const [enabled, setEnabled] = useState({audio: false, video: false});
   const [busy, setBusy] = useState<Kind | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const display = useRef<MediaStreamTrack | null>(null);
   const [error, setError] = useState('');
   const alive = useRef(false);
   const preview = useRef<HTMLVideoElement>(null);
@@ -20,6 +22,8 @@ export function CallMedia({connection, remote}: {
     if (preview.current) preview.current.srcObject = local;
     return () => {
       alive.current = false;
+      display.current?.stop();
+      display.current = null;
       for (const track of local.getTracks()) track.stop();
     };
   }, [local]);
@@ -61,12 +65,62 @@ export function CallMedia({connection, remote}: {
     }
   }
 
+  async function stopSharing() {
+    const track = display.current;
+    if (!track) return;
+    display.current = null;
+    track.onended = null;
+    track.stop();
+    setBusy('video');
+    try {
+      const camera = local.getVideoTracks().find(candidate => candidate.readyState === 'live');
+      await connection.setTrack('video', camera ?? null);
+    } catch {
+      if (alive.current) setError('Screen sharing stopped. Toggle your camera to restore video.');
+    } finally {
+      if (alive.current) {
+        if (preview.current) preview.current.srcObject = local;
+        setSharing(false);
+        setBusy(null);
+      }
+    }
+  }
+
+  async function startSharing() {
+    setBusy('video');
+    setError('');
+    let track: MediaStreamTrack | undefined;
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({video: true, audio: false});
+      track = stream.getVideoTracks()[0];
+      if (!alive.current) { track.stop(); return; }
+      await connection.setTrack('video', track);
+      if (!alive.current) { track.stop(); return; }
+      display.current = track;
+      track.onended = () => void stopSharing();
+      if (track.readyState === 'ended') { await stopSharing(); return; }
+      if (preview.current) preview.current.srcObject = stream;
+      setSharing(true);
+    } catch (cause) {
+      track?.stop();
+      if (alive.current && !(cause instanceof DOMException && cause.name === 'NotAllowedError')) {
+        setError('Could not share this screen. Try another window or tab.');
+      }
+    } finally {
+      if (alive.current) setBusy(null);
+    }
+  }
+
   return <div className="call">
     <figure><video ref={player} aria-label="Peer video" autoPlay playsInline controls/><figcaption>Peer</figcaption></figure>
-    <figure className="preview"><video ref={preview} aria-label="Your preview" autoPlay muted playsInline/><figcaption>You</figcaption></figure>
+    <figure className="preview"><video ref={preview} aria-label="Your preview" autoPlay muted playsInline/><figcaption>{sharing ? 'Your screen' : 'You'}</figcaption></figure>
     <div className="devices">
       <button disabled={busy !== null} onClick={() => toggle('audio')}>{enabled.audio ? 'Mute microphone' : 'Enable microphone'}</button>
-      <button disabled={busy !== null} onClick={() => toggle('video')}>{enabled.video ? 'Turn camera off' : 'Enable camera'}</button>
+      <button disabled={busy !== null || sharing} onClick={() => toggle('video')}>{enabled.video ? 'Turn camera off' : 'Enable camera'}</button>
+      {typeof navigator.mediaDevices?.getDisplayMedia === 'function' &&
+        <button disabled={busy !== null} onClick={sharing ? stopSharing : startSharing}>
+          {sharing ? 'Stop sharing' : 'Share screen'}
+        </button>}
     </div>
     {error && <p role="alert">{error}</p>}
   </div>;

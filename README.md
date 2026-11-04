@@ -6,6 +6,8 @@ A two-person WebRTC audio/video call with data-channel chat built with React, Ty
 
 Use Node.js 22.12 or newer. Run `npm ci`, then `npm run dev`. Open the printed localhost URL, create a room and open its invite link in another tab. Once both tabs show Connected, send a message or enable your camera and microphone independently. Both start off. Use the peer video playback controls if your browser blocks autoplay. Leave room ends the call. After either peer rejoins, devices require fresh opt-in.
 
+In a connected room, choose **Share screen** and select a tab, window or display in the browser picker. The selected video replaces the outgoing camera track. Your microphone keeps its current setting. Stop sharing in the room or in the browser to return to the previous camera state. This control appears on browsers that support display capture.
+
 ## Run the production build
 
 Run `npm ci`, `npm run build`, then `npm start`. Open http://127.0.0.1:3000. One Node process serves the built frontend, handles WebSocket upgrades at `/signal` and answers health checks at `/healthz`. The browser test exercises this entry point with an ephemeral port.
