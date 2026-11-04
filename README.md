@@ -24,6 +24,22 @@ Peers reserve audio and video transceivers during initial negotiation. Device co
 
 The Connected state follows the data channel's open event. Messages travel over that channel. A full room rejects further joins. On disconnect the server invalidates the pairing, frees the slot and deletes an empty room. A returning browser negotiates a new connection. There is no persistent message history.
 
+## Interview walkthrough
+
+**Explain one call in 30 seconds.** “Two browsers join the same room over WebSocket. The Node server picks one to make an offer and forwards the SDP answer and ICE candidates between them. SDP describes what the browsers agree to send. ICE tests where they can send it. STUN can help a browser discover its public-facing address. TURN supplies a relay candidate when the browsers need an indirect path. Once the chat channel opens, I can send a message and inspect the selected candidate pair in the room.”
+
+| Interview question | What happens in Vidloom |
+| --- | --- |
+| What if both peers try to call first? | The server assigns one offerer for each pairing. A fresh session ID lets it discard late signaling messages from an earlier pairing. [Signaling server](./server.mjs) |
+| What if an ICE candidate arrives before the SDP offer? | The receiver queues the candidate until it has applied the remote description, then drains the queue. [Peer connection](./peer.ts) |
+| Why does screen sharing preserve chat and microphone audio? | The browser replaces the outgoing video sender’s track. The audio sender and data channels keep using the existing connection. [Screen controls](./CallMedia.tsx) |
+| How can you tell whether TURN carried the call? | Open **Connection details**. Vidloom reads the selected pair from the transport statistics. A relay candidate on either end identifies a relayed path. The displayed round-trip time measures an ICE connectivity check. [Route inspection](./diagnostics.ts) |
+| What limits the deployment today? | A single Node process owns the room map. If two peers reach different instances, those processes cannot pair them. Horizontal scaling would require room-aware routing or shared signaling coordination. |
+
+**Two-minute demo.** Open one invite in two tabs. Send a message before enabling either camera, then open **Connection details** and describe the selected route. Turn on a camera, switch to a shared screen, and send another message. Close one tab and point out that the remaining browser returns to the waiting state. Reopen the invite to show a fresh pairing.
+
+**What has been verified.** Local browser runs exercised both direct calls and forced TURN calls through an authenticated relay. The checks covered received audio samples, decoded video frames, chat and a byte-for-byte file download. Screen-sharing tests used a synthetic display. A call between physical devices on Wi-Fi and cellular is a separate verification step. [Browser tests](./room.test.mjs)
+
 ## Verification
 
 Run `npm run build` for type checking and a production client bundle. Run `npm test` to exercise real tabs with headless Chromium. The test uses Microsoft Edge at its standard Windows location, or set BROWSER_PATH to a Chromium executable. The test starts its own local server.
