@@ -70,3 +70,7 @@ aside label { min-width: 0; }
   .art .signal { animation: arrive .7s ease-out both; }
   @keyframes arrive { from { opacity: .45; transform: translateY(6px); } }
 }
+
+.file-transfer { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #d9cdc5; overflow-wrap: anywhere; }
+.file-transfer input { margin: .35rem 0; font-size: .85rem; }
+.file-transfer a { display: block; }

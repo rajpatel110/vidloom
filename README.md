@@ -8,6 +8,8 @@ Use Node.js 22.12 or newer. Run `npm ci`, then `npm run dev`. Open the printed l
 
 In a connected room, choose **Share screen** and select a tab, window or display in the browser picker. The selected video replaces the outgoing camera track. Your microphone keeps its current setting. Stop sharing in the room or in the browser to return to the previous camera state. This control appears on browsers that support display capture.
 
+**Send a file** shares one file up to 8 MiB with the connected peer. Vidloom sends 16 KiB chunks on a dedicated ordered WebRTC data channel, pauses when the outgoing buffer fills, and confirms delivery after the receiver assembles the declared number of bytes. The receiver can download the latest file until the pairing ends or another file arrives. Files stay in browser memory during transfer.
+
 ## Run the production build
 
 Run `npm ci`, `npm run build`, then `npm start`. Open http://127.0.0.1:3000. One Node process serves the built frontend, handles WebSocket upgrades at `/signal` and answers health checks at `/healthz`. The browser test exercises this entry point with an ephemeral port.

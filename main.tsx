@@ -9,6 +9,7 @@ function Room({id}: {id: string}) {
   const [messages, setMessages] = useState<{from:string, text:string}[]>([]);
   const [route, setRoute] = useState('');
   const [remote, setRemote] = useState<MediaStream | null>(null);
+  const [received, setReceived] = useState<File | null>(null);
   const [draft, setDraft] = useState('');
   const [copied, setCopied] = useState('');
   const peer = useRef<ReturnType<typeof joinRoom> | null>(null);
@@ -16,7 +17,7 @@ function Room({id}: {id: string}) {
     setMessages(old => [...old.slice(-99), {from, text}]);
   }
   useEffect(() => {
-    const connection = joinRoom(id, status, text => add('Peer', text), setRemote, setRoute);
+    const connection = joinRoom(id, status, text => add('Peer', text), setRemote, setRoute, setReceived);
     peer.current = connection;
     return () => connection.close();
   }, [id]);
@@ -31,8 +32,41 @@ function Room({id}: {id: string}) {
     <section role="log" aria-label="Chat messages">{messages.length ? messages.map((m,i) => <p key={i}><b>{m.from}</b> {m.text}</p>) : <p>Messages appear here once you and your peer connect.</p>}</section>
     <form onSubmit={e => {e.preventDefault(); const text = draft.trim(); if (text && peer.current?.send(text)) {add('You',text); setDraft('');}}}>
     <label>Message<input maxLength={2000} disabled={state !== 'Connected'} value={draft} onChange={e => setDraft(e.target.value)}/></label>
-    <button disabled={state !== 'Connected' || !draft.trim()}>Send</button></form></aside></div></>;
+    <button disabled={state !== 'Connected' || !draft.trim()}>Send</button></form>{state === 'Connected' && peer.current && <Files connection={peer.current} received={received}/>}</aside></div></>;
 }
+function Files({connection, received}: {connection: ReturnType<typeof joinRoom>, received: File | null}) {
+  const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState('');
+  const [download, setDownload] = useState('');
+  useEffect(() => {
+    if (!received) { setDownload(''); return; }
+    const url = URL.createObjectURL(received);
+    setDownload(url);
+    return () => URL.revokeObjectURL(url);
+  }, [received]);
+  async function transfer(file: File) {
+    setSending(true);
+    setStatus('Sending ' + file.name);
+    try {
+      await connection.transfer(file);
+      setStatus('Peer received ' + file.name);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Transfer failed.');
+    } finally { setSending(false); }
+  }
+  return <div className="file-transfer">
+    <label>Send a file <small>(up to 8 MiB)</small>
+      <input type="file" disabled={sending} onChange={e => {
+        const file = e.currentTarget.files?.[0];
+        e.currentTarget.value = '';
+        if (file) void transfer(file);
+      }}/>
+    </label>
+    <small role="status">{status}</small>
+    {received && download && <a href={download} download={received.name}>Download {received.name}</a>}
+  </div>;
+}
+
 function Brand() {
   return <span className="brand"><i aria-hidden="true">≈</i> Vidloom</span>;
 }

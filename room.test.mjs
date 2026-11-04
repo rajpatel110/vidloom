@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
@@ -50,6 +52,23 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
     await receiver.getByRole('log').getByText(text,{exact:false}).waitFor({timeout:5000});
   }
   await exchange(first,second,'hello');
+  const payload = randomBytes(1024 * 1024 + 17);
+  const fileInput = first.getByLabel('Send a file', {exact:false});
+  await fileInput.setInputFiles({name:'sample.bin', mimeType:'application/octet-stream', buffer:payload});
+  await exchange(first, second, 'chat alongside file transfer');
+  const downloadEvent = second.waitForEvent('download');
+  await second.getByRole('link', {name:'Download sample.bin'}).click();
+  const download = await downloadEvent;
+  assert.equal(download.suggestedFilename(), 'sample.bin');
+  assert.deepEqual(await readFile(await download.path()), payload);
+  await wait(first, 'Peer received sample.bin');
+  await fileInput.setInputFiles({name:'oversized.bin', mimeType:'application/octet-stream', buffer:Buffer.alloc(8*1024*1024 + 1)});
+  await wait(first, 'Choose a file up to 8 MiB.');
+  await second.getByLabel('Send a file', {exact:false}).setInputFiles({
+    name:'empty.txt', mimeType:'text/plain', buffer:Buffer.alloc(0)
+  });
+  await wait(first, 'Download empty.txt');
+  await wait(second, 'Peer received empty.txt');
   for (const page of [first, second]) {
     if (process.env.ICE_TRANSPORT_POLICY === 'relay') await wait(page, 'Relayed via TURN');
     else if (!process.env.TURN_URLS) await wait(page, 'Direct peer connection');

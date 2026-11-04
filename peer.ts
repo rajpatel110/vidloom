@@ -1,4 +1,6 @@
-export function joinRoom(id: string, status: (s: string) => void, receive: (s: string) => void, remote: (stream: MediaStream | null) => void, route: (label: string) => void) {
+import {receiveFile, sendFile} from './files';
+
+export function joinRoom(id: string, status: (s: string) => void, receive: (s: string) => void, remote: (stream: MediaStream | null) => void, route: (label: string) => void, deliver: (file: File | null) => void) {
   const url = new URL('/signal', location.href);
   url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(url);
@@ -15,6 +17,7 @@ export function joinRoom(id: string, status: (s: string) => void, receive: (s: s
     route('');
     session = '';
     remote(null);
+    deliver(null);
     senders.clear();
     const previous = pc;
     pc = undefined;
@@ -87,7 +90,14 @@ export function joinRoom(id: string, status: (s: string) => void, receive: (s: s
           }
           if (current.connectionState === 'failed') status('Connection failed · refresh to retry');
         };
-        current.ondatachannel = e => attach(e.channel);
+        let incomingFile: RTCDataChannel | undefined;
+        current.ondatachannel = ({channel}) => {
+          if (pc !== current) return channel.close();
+          if (channel.label === 'chat') return attach(channel);
+          if (channel.label !== 'file' || (incomingFile && incomingFile.readyState !== 'closed')) return channel.close();
+          incomingFile = channel;
+          receiveFile(channel, file => { if (pc === current) deliver(file); });
+        };
         if (m.initiator) {
           attach(current.createDataChannel('chat'));
           await current.setLocalDescription(await current.createOffer());
@@ -115,6 +125,10 @@ export function joinRoom(id: string, status: (s: string) => void, receive: (s: s
       const sender = senders.get(kind);
       if (!sender) throw new Error('Peer disconnected');
       await sender.replaceTrack(track);
+    },
+    async transfer(file: File) {
+      if (!pc || data?.readyState !== 'open') throw new Error('Connect to a peer first.');
+      await sendFile(pc, file);
     },
     send(text: string) {
       if (data?.readyState !== 'open') return false;
