@@ -38,7 +38,11 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
   await wait(first,'Waiting for peer');
   const invite = first.url();
   const second = await context.newPage();
-  await second.goto(invite);
+  await second.setViewportSize({width: 360, height: 800});
+  await second.goto(origin);
+  assert.ok(await second.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await second.getByLabel('Have an invite?').fill(invite);
+  await second.getByRole('button', {name: 'Join room'}).click();
   async function exchange(sender, receiver, text) {
     await Promise.all([wait(sender,'Connected'),wait(receiver,'Connected')]);
     await sender.getByLabel('Message',{exact:true}).fill(text);
@@ -66,6 +70,7 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
   }
   await first.waitForFunction(() => window.roomPeer.getSenders().every(sender => !sender.track));
   await exchange(first, second, 'chat after stopping devices');
+  assert.ok(await second.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   const third = await context.newPage();
   await third.goto(invite);
   await wait(third,'Room full');
