@@ -73,6 +73,17 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
     if (process.env.ICE_TRANSPORT_POLICY === 'relay') await wait(page, 'Relayed via TURN');
     else if (!process.env.TURN_URLS) await wait(page, 'Direct peer connection');
     else await wait(page, /^(Direct peer connection|Relayed via TURN)$/);
+    await page.getByText('Connection details', {exact:true}).click();
+    const fields = page.locator('.diagnostics dd');
+    const actual = await page.evaluate(async () => {
+      const stats = await window.roomPeer.getStats();
+      const transport = [...stats.values()].find(s => s.selectedCandidatePairId);
+      const pair = stats.get(transport.selectedCandidatePairId);
+      const local = stats.get(pair.localCandidateId);
+      return [local.candidateType, stats.get(pair.remoteCandidateId).candidateType, local.protocol.toUpperCase()];
+    });
+    assert.deepEqual((await fields.allTextContents()).slice(0,3), actual);
+    await page.locator('.diagnostics dd').filter({hasText:/^\d+ ms$/}).waitFor();
     await page.getByRole('button',{name:'Enable microphone'}).click();
     await page.getByRole('button',{name:'Enable camera'}).click();
     await page.getByRole('button',{name:'Turn camera off'}).waitFor();

@@ -1,6 +1,7 @@
+import {selectedRoute, type ConnectionDetails} from './diagnostics';
 import {receiveFile, sendFile} from './files';
 
-export function joinRoom(id: string, status: (s: string) => void, receive: (s: string) => void, remote: (stream: MediaStream | null) => void, route: (label: string) => void, deliver: (file: File | null) => void) {
+export function joinRoom(id: string, status: (s: string) => void, receive: (s: string) => void, remote: (stream: MediaStream | null) => void, route: (details: ConnectionDetails | null) => void, deliver: (file: File | null) => void) {
   const url = new URL('/signal', location.href);
   url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(url);
@@ -14,7 +15,7 @@ export function joinRoom(id: string, status: (s: string) => void, receive: (s: s
   let routeTimer: number | undefined;
   function reset() {
     window.clearInterval(routeTimer);
-    route('');
+    route(null);
     session = '';
     remote(null);
     deliver(null);
@@ -54,19 +55,11 @@ export function joinRoom(id: string, status: (s: string) => void, receive: (s: s
         const current = new RTCPeerConnection(m.configuration);
         pc = current;
         async function updateRoute() {
-          let label = 'Route unavailable';
+          let details: ConnectionDetails = {label: 'Route unavailable'};
           try {
-            const stats = await current.getStats();
-            stats.forEach(report => {
-              if (report.type !== 'transport' || !report.selectedCandidatePairId) return;
-              const pair = stats.get(report.selectedCandidatePairId);
-              const local = stats.get(pair?.localCandidateId)?.candidateType;
-              const remoteType = stats.get(pair?.remoteCandidateId)?.candidateType;
-              if (local === 'relay' || remoteType === 'relay') label = 'Relayed via TURN';
-              else if (local && remoteType) label = 'Direct peer connection';
-            });
-          } catch { /* Some browsers omit transport statistics. */ }
-          if (pc === current) route(label);
+            details = selectedRoute(await current.getStats());
+          } catch { /* Statistics may be unavailable while closing. */ }
+          if (pc === current && current.connectionState === 'connected') route(details);
         }
         const incoming = new MediaStream();
         current.ontrack = ({track}) => {
@@ -83,7 +76,7 @@ export function joinRoom(id: string, status: (s: string) => void, receive: (s: s
         current.onconnectionstatechange = () => {
           if (pc !== current) return;
           window.clearInterval(routeTimer);
-          route('');
+          route(null);
           if (current.connectionState === 'connected') {
             void updateRoute();
             routeTimer = window.setInterval(updateRoute, 3000);

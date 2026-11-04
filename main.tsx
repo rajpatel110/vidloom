@@ -1,3 +1,4 @@
+import type {ConnectionDetails} from './diagnostics';
 import React, {useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {joinRoom} from './peer';
@@ -7,7 +8,7 @@ import './style.css';
 function Room({id}: {id: string}) {
   const [state, status] = useState('Joining');
   const [messages, setMessages] = useState<{from:string, text:string}[]>([]);
-  const [route, setRoute] = useState('');
+  const [route, setRoute] = useState<ConnectionDetails | null>(null);
   const [remote, setRemote] = useState<MediaStream | null>(null);
   const [received, setReceived] = useState<File | null>(null);
   const [draft, setDraft] = useState('');
@@ -22,7 +23,17 @@ function Room({id}: {id: string}) {
     return () => connection.close();
   }, [id]);
   return <><header><Brand/><a href="/">Leave room</a></header>
-    <div className="room-title"><h1>Call room</h1><p className="status" role="status">{state}</p>{state === 'Connected' && <p>{route || 'Checking connection route…'}</p>}</div>
+    <div className="room-title"><h1>Call room</h1><p className="status" role="status">{state}</p>{state === 'Connected' && <p>{route?.label || 'Checking connection route…'}</p>}</div>
+    {state === 'Connected' && <details className="diagnostics">
+      <summary>Connection details</summary>
+      <dl>
+        <div><dt>Local ICE candidate</dt><dd>{route?.localType ?? 'Unavailable'}</dd></div>
+        <div><dt>Remote ICE candidate</dt><dd>{route?.remoteType ?? 'Unavailable'}</dd></div>
+        <div><dt>Candidate protocol</dt><dd>{route?.protocol ?? 'Unavailable'}</dd></div>
+        <div><dt>ICE round-trip time</dt><dd>{route?.roundTripMs == null ? 'Unavailable' : route.roundTripMs + ' ms'}</dd></div>
+      </dl>
+      <small>Measured between peers using ICE connectivity checks. Updated every three seconds.</small>
+    </details>}
     <div className="invite"><label>Invite link<input readOnly value={location.href} onFocus={e => e.target.select()}/></label>
     <button onClick={async () => {try {await navigator.clipboard.writeText(location.href); setCopied('Copied');} catch {setCopied('Select the link above to copy it');}}}>Copy link</button> <small role="status">{copied}</small></div>
     <div className="room-grid"><div className="stage">

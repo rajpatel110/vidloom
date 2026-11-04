@@ -74,3 +74,9 @@ aside label { min-width: 0; }
 .file-transfer { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #d9cdc5; overflow-wrap: anywhere; }
 .file-transfer input { margin: .35rem 0; font-size: .85rem; }
 .file-transfer a { display: block; }
+
+.diagnostics { margin: 0 0 1rem; border-block: 1px solid #d9cdc5; padding: .65rem 0; }
+.diagnostics summary { cursor: pointer; font-weight: 650; }
+.diagnostics dl { display: grid; grid-template-columns: repeat(auto-fit,minmax(9rem,1fr)); gap: .8rem; margin: .8rem 0; }
+.diagnostics dt, .diagnostics small { font-size: .85rem; color: #63565d; }
+.diagnostics dd { margin: 0; font-weight: 650; font-variant-numeric: tabular-nums; }
