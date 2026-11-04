@@ -2,12 +2,12 @@ import { iceConfig } from './ice.mjs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'node:crypto';
 
-export function attachRooms(server) {
+export function attachRooms(server, paths = ['/signal']) {
   const configuration = iceConfig();
   const rooms = new Map();
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 65536 });
   server.on('upgrade', (req, socket, head) => {
-    if (req.url !== '/signal') return;
+    if (!paths.includes(req.url.split('?')[0])) return;
     if (req.headers.origin !== 'http://' + req.headers.host &&
         req.headers.origin !== 'https://' + req.headers.host) return socket.destroy();
     sockets.handleUpgrade(req, socket, head, ws => sockets.emit('connection', ws));

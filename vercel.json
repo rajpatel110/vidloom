@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    {"source": "/signal", "destination": "/api/signal"},
+    {"source": "/healthz", "destination": "/api/signal"}
+  ]
+}
