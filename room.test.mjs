@@ -32,6 +32,13 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
     window.WebSocket = class extends NativeSocket {
       constructor(...args) { super(...args); window.signalingSocket = this; }
     };
+    const nativePlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function() {
+      if (this.getAttribute('aria-label') === 'Peer video' && !window.allowPeerPlayback) {
+        return Promise.reject(new DOMException('Autoplay blocked', 'NotAllowedError'));
+      }
+      return nativePlay.call(this);
+    };
     const NativePeer = window.RTCPeerConnection;
     window.RTCPeerConnection = class extends NativePeer {
       constructor(...args) { super(...args); window.roomPeer = this; }
@@ -56,6 +63,7 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
     await receiver.getByRole('log').getByText(text,{exact:false}).waitFor({timeout:5000});
   }
   await exchange(first,second,'hello');
+
   await wait(second,'Peer microphone muted');
   await wait(second,'Peer camera off');
   const payload = randomBytes(1024 * 1024 + 17);
@@ -95,6 +103,9 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
     await page.getByRole('button',{name:'Turn camera off'}).waitFor();
   }
   for (const page of [first, second]) {
+    await page.getByRole('button', {name:'Play peer video and audio'}).waitFor({timeout:3000});
+    await page.evaluate(() => { window.allowPeerPlayback = true; });
+    await page.getByRole('button', {name:'Play peer video and audio'}).click();
     await page.waitForFunction(async () => {
       const reports = [...(await window.roomPeer.getStats()).values()];
       const inbound = reports.filter(report => report.type === 'inbound-rtp');
@@ -105,6 +116,14 @@ test('two peers exchange messages, enforce capacity and reconnect', {timeout: 90
   for (const page of [first,second]) {
     await wait(page,'Peer microphone on');
     await wait(page,'Peer camera on');
+  }
+  for (const page of [first, second]) {
+    const playButton = page.getByRole('button', {name:'Play peer video and audio'});
+    if (await playButton.isVisible()) await playButton.click();
+    await page.waitForFunction(() => {
+      const video = document.querySelector('video[aria-label="Peer video"]');
+      return !video.paused && video.videoWidth > 0 && video.currentTime > 0;
+    });
   }
   // A solid green synthetic display lets the receiver prove which source it decoded.
   await first.evaluate(() => {

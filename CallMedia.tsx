@@ -13,6 +13,7 @@ export function CallMedia({connection, remote, peerMedia}: {
   const [busy, setBusy] = useState<Kind | null>(null);
   const [sharing, setSharing] = useState(false);
   const display = useRef<MediaStreamTrack | null>(null);
+  const [playbackBlocked, setPlaybackBlocked] = useState(false);
   const [error, setError] = useState('');
   const alive = useRef(false);
   const preview = useRef<HTMLVideoElement>(null);
@@ -30,7 +31,26 @@ export function CallMedia({connection, remote, peerMedia}: {
   }, [local]);
 
   useEffect(() => {
-    if (player.current) player.current.srcObject = remote;
+    const video = player.current;
+    if (!video || !remote) return;
+    let active = true;
+    video.srcObject = remote;
+    const play = () => {
+      void video.play().then(() => {
+        if (active) setPlaybackBlocked(false);
+      }).catch(() => {
+        if (active) setPlaybackBlocked(true);
+      });
+    };
+    const tracks = remote.getTracks();
+    for (const track of tracks) track.addEventListener('unmute', play);
+    video.addEventListener('loadedmetadata', play);
+    play();
+    return () => {
+      active = false;
+      for (const track of tracks) track.removeEventListener('unmute', play);
+      video.removeEventListener('loadedmetadata', play);
+    };
   }, [remote]);
 
   useEffect(() => {
@@ -119,6 +139,9 @@ export function CallMedia({connection, remote, peerMedia}: {
   return <div className="call">
     <figure><video ref={player} aria-label="Peer video" autoPlay playsInline controls/><figcaption>Peer</figcaption></figure>
     <figure className="preview"><video ref={preview} aria-label="Your preview" autoPlay muted playsInline/><figcaption>{sharing ? 'Your screen' : 'You'}</figcaption></figure>
+    {playbackBlocked && <button onClick={() => {
+      void player.current?.play().then(() => setPlaybackBlocked(false)).catch(() => setPlaybackBlocked(true));
+    }}>Play peer video and audio</button>}
     <p className="peer-devices" role="status" aria-label="Peer devices">
       {peerMedia ? <>
         <span>{peerMedia.mic ? 'Peer microphone on' : 'Peer microphone muted'}</span>

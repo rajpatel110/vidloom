@@ -94,10 +94,10 @@ export function joinRoom(id: string, status: (s: RoomState) => void, receive: (s
         current.ontrack = ({track}) => {
           if (pc !== current) return;
           incoming.addTrack(track);
-          remote(incoming);
+          remote(new MediaStream(incoming.getTracks()));
         };
         // Reserve both media sections so either peer can enable a device later.
-        for (const kind of ['audio', 'video']) {
+        for (const kind of m.initiator ? ['audio', 'video'] : []) {
           const transceiver = current.addTransceiver(kind, {direction: 'sendrecv'});
           senders.set(kind, transceiver.sender);
         }
@@ -107,6 +107,7 @@ export function joinRoom(id: string, status: (s: RoomState) => void, receive: (s
           window.clearInterval(routeTimer);
           route(null);
           if (current.connectionState === 'connected') {
+            remote(new MediaStream(current.getReceivers().map(receiver => receiver.track)));
             void updateRoute();
             routeTimer = window.setInterval(updateRoute, 3000);
           }
@@ -133,6 +134,12 @@ export function joinRoom(id: string, status: (s: RoomState) => void, receive: (s
         else pending.push(m.value);
       } else if (m.type === 'offer' || m.type === 'answer') {
         await pc.setRemoteDescription(m.value);
+        if (m.type === 'offer') {
+          for (const transceiver of pc.getTransceivers()) {
+            transceiver.direction = 'sendrecv';
+            senders.set(transceiver.receiver.track.kind, transceiver.sender);
+          }
+        }
         for (const c of pending) await pc.addIceCandidate(c);
         pending = [];
         if (m.type === 'offer') {
